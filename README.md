@@ -1,0 +1,2 @@
+# naniutsu
+AI Slot Reserch
