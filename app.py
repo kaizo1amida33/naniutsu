@@ -4,6 +4,15 @@
 # - 特徴量は学習時パイプラインを再現（リーク防止・ウォームアップ付き）
 # - αは固定 or 自動スイープ
 # - K=1トップを表示＆CSV保存
+import sys, platform
+import streamlit as st
+import numpy as np, pandas as pd, sklearn, joblib
+
+st.caption(
+    f"Python {sys.version.split()[0]} | "
+    f"sklearn {sklearn.__version__} | joblib {joblib.__version__} | "
+    f"numpy {np.__version__} | pandas {pd.__version__} | {platform.platform()}"
+)
 
 import os, io, glob, zipfile, datetime as dt
 import numpy as np
