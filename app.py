@@ -12,12 +12,14 @@ import streamlit as st
 import sklearn, joblib as jb
 import importlib.util as iu
 
-# ---------- ここを一番最初の Streamlit 呼び出しにする ----------
 APP_TITLE = "K=1 BLEND Predictor"
+
+# ---------- ここを一番最初の Streamlit 呼び出しにする ----------
 st.set_page_config(page_title=APP_TITLE, layout="wide")
 # --------------------------------------------------------------
 
 # バージョン情報表示（任意）
+st.title(APP_TITLE)
 st.caption(
     f"Python {sys.version.split()[0]} | "
     f"sklearn {sklearn.__version__} | joblib {jb.__version__} | "
