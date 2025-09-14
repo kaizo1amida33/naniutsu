@@ -18,14 +18,6 @@ APP_TITLE = "K=1 BLEND Predictor"
 st.set_page_config(page_title=APP_TITLE, layout="wide")
 # --------------------------------------------------------------
 
-# バージョン情報表示（任意）
-st.title(APP_TITLE)
-st.caption(
-    f"Python {sys.version.split()[0]} | "
-    f"sklearn {sklearn.__version__} | joblib {jb.__version__} | "
-    f"numpy {np.__version__} | pandas {pd.__version__} | {platform.platform()}"
-)
-
 # ====== 設定 ======
 PK_FILE   = "pk_series_rank_v_4x_dual_mw_v13_featprune_fix7.py"  # リポジトリ同梱想定
 WARMUP_DAYS_DEFAULT = 7
