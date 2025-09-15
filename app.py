@@ -1,273 +1,181 @@
 # -*- coding: utf-8 -*-
-# Streamlit — 翌日K=1予測（BASE/DROP/BLEND）
-# - 学習CSV(v14×4) + テストCSV(*_test_ge_*_v14)をアップロード
-# - 特徴量は学習時パイプラインを再現（リーク防止・ウォームアップ付き）
-# - αは固定 or 自動スイープ
-# - K=1トップを表示＆CSV保存
+# Streamlit — K=1ミニマル配信UI（特日/角バッジ・月次チャート・軽量認証・CSS幅固定）
+# ルール厳守:
+# - 相対パスのみ（絶対パス禁止）
+# - st.set_page_config は最上部で一度だけ
+# - inplace=False
+# - ユーザー画面は「日付・機種・台番号」中心。内部CSVのUpload/Downloadは出さない
 
-import sys, platform, os, io, glob, zipfile, datetime as dt
-import numpy as np
+from pathlib import Path
+from datetime import date
 import pandas as pd
 import streamlit as st
-import sklearn, joblib as jb
-import importlib.util as iu
 
-APP_TITLE = "K=1 BLEND Predictor"
+# ===== ページ設定（先頭で一度だけ） =====
+st.set_page_config(page_title="K=1日次予測", page_icon="🎯", layout="wide")
 
-# ---------- ここを一番最初の Streamlit 呼び出しにする ----------
-st.set_page_config(page_title=APP_TITLE, layout="wide")
-# --------------------------------------------------------------
+# ===== 軽量認証（Secrets） =====
+# Secrets 例（.streamlit/secrets.toml）:
+# APP_PASSCODE = "123456"
+# ALLOWED_EMAILS = ["you@example.com", "ops@example.com"]
+# BASE_MODEL_DIR = "models/out_series_dual_v14_7_nf_plus_p90_pct_corner/model_dir.joblib"
+# DROP_MODEL_DIR = "models/out_series_dual_v14_7_dropcand_v1/model_dir.joblib"
+# PICKS_DIR = "outputs/picks"
+# METRICS_FILE = "outputs/metrics/metrics_history.csv"
 
-# ====== 設定 ======
-PK_FILE   = "pk_series_rank_v_4x_dual_mw_v13_featprune_fix7.py"  # リポジトリ同梱想定
-WARMUP_DAYS_DEFAULT = 7
+def _get_allowed_emails():
+    v = st.secrets.get("ALLOWED_EMAILS", [])
+    if isinstance(v, str):
+        v = [x.strip() for x in v.split(",") if x.strip()]
+    return set(v)
 
-# ====== ヘルパ ======
-@st.cache_resource(show_spinner=False)
-def load_module(pk_path: str):
-    if not os.path.isfile(pk_path):
-        raise FileNotFoundError(f"{pk_path} が見つかりません（リポジトリに同梱してください）")
-    S = iu.spec_from_file_location("m", pk_path)
-    m = iu.module_from_spec(S); S.loader.exec_module(m)
-    return m
+def require_auth():
+    allowed = _get_allowed_emails()
+    passcode = st.secrets.get("APP_PASSCODE", None)
+    if not allowed and not passcode:
+        st.info("デモモード（認証無効）。本番は Secrets に ALLOWED_EMAILS と APP_PASSCODE を設定してください。")
+        return
+    with st.sidebar:
+        st.header("認証")
+        email = st.text_input("メール", value="")
+        code = st.text_input("パスコード", type="password", value="")
+        ok = st.button("入室")
+    if ok:
+        email_ok = True if not allowed else (email in allowed)
+        code_ok = True if not passcode else (str(code) == str(passcode))
+        st.session_state["_authed"] = bool(email_ok and code_ok)
+        if not st.session_state["_authed"]:
+            st.error("認証失敗：許可メールまたはパスコードが不正です。")
+    if not st.session_state.get("_authed", False):
+        st.stop()
 
-def ensure_min_schema(df: pd.DataFrame) -> pd.DataFrame:
-    D = df.copy()
-    if "date" not in D.columns:
-        raise ValueError("date 列が必要です")
-    D["date"] = pd.to_datetime(D["date"], errors="coerce")
+# ===== サイドバーCSS（幅固定） =====
+def inject_sidebar_css(width_px=320):
+    css = "<style>[data-testid='stSidebar']{min-width:%dpx;width:%dpx;}</style>" % (width_px, width_px)
+    st.markdown(css, unsafe_allow_html=True)
 
-    for c in ["samai","g_num","avg"]:
-        if c in D.columns:
-            D[c] = pd.to_numeric(D[c], errors="coerce")
+# ===== 設定（Secrets優先・相対パスのみ） =====
+BASE_MODEL_DIR = st.secrets.get("BASE_MODEL_DIR", "models/out_series_dual_v14_7_nf_plus_p90_pct_corner/model_dir.joblib")
+DROP_MODEL_DIR = st.secrets.get("DROP_MODEL_DIR", "models/out_series_dual_v14_7_dropcand_v1/model_dir.joblib")
+PICKS_DIR      = Path(st.secrets.get("PICKS_DIR", "outputs/picks"))
+METRICS_FILE   = Path(st.secrets.get("METRICS_FILE", "outputs/metrics/metrics_history.csv"))
 
-    if "series" not in D.columns:
-        D["series"] = "NA"
-    if "is_special" not in D.columns:
-        D["is_special"] = 0
+# ===== 画面ヘッダ =====
+require_auth()
+inject_sidebar_css(320)
+st.title("K=1 日次予測（プラザ博多 4機種）")
 
-    # 学習CSVに target が無い時のフォールバック（2000枚以上で1）
-    if "target" not in D.columns and "samai" in D.columns:
-        D["target"] = (D["samai"] >= 2000).astype(int)
-
-    # 評価可視化用
-    if "target_eval" not in D.columns and "samai" in D.columns:
-        D["target_eval"] = (D["samai"] >= 2000).astype(int)
-
-    return D
-
-def get_samai_col(df: pd.DataFrame):
-    for c in df.columns:
-        if str(c).lower().startswith("samai"):
-            return c
-    return None
-
-def _resolve_model(bundles: dict, prefer_key: str):
-    entry = bundles.get(prefer_key)
-    if entry is None:
-        entry = next(iter(bundles.values()))
-    if isinstance(entry, dict):
-        entry = entry.get("model", entry)
-    return entry
-
-def _score_proba(mdl, X: np.ndarray) -> np.ndarray:
-    if hasattr(mdl, "predict_proba"):
-        p = mdl.predict_proba(X); return p[:, 1] if p.ndim == 2 else p
-    if hasattr(mdl, "decision_function"):
-        s = mdl.decision_function(X); s = np.asarray(s).ravel()
-        return 1.0 / (1.0 + np.exp(-s))
-    y = mdl.predict(X); return (np.asarray(y).ravel() >= 0.5).astype(float)
-
-def predict_bundle(model_blob, feat_list, D: pd.DataFrame):
-    X = D.reindex(columns=feat_list, fill_value=0.0).values
-    bundles = model_blob["bundles"]
-    if ("nonsp" in bundles) or ("sp" in bundles):
-        sp_mask = (D["is_special"] == 1).values
-        p = np.zeros(len(D), dtype=float)
-        mdl_ns = _resolve_model(bundles, "nonsp" if "nonsp" in bundles else "all")
-        idx_ns = np.where(~sp_mask)[0]
-        if idx_ns.size: p[idx_ns] = _score_proba(mdl_ns, X[idx_ns])
-        mdl_sp = _resolve_model(bundles, "sp" if "sp" in bundles else "all")
-        idx_sp = np.where(sp_mask)[0]
-        if idx_sp.size: p[idx_sp] = _score_proba(mdl_sp, X[idx_sp])
-        return p
-    mdl = _resolve_model(bundles, "all")
-    return _score_proba(mdl, X)
-
-def eval_k1(D: pd.DataFrame, scores: np.ndarray, sam_col: str | None):
-    V = D.copy(); V["score"] = scores
-    g = (V.sort_values(["date","score"], ascending=[True,False])
-           .groupby("date", as_index=False).head(1))
-    has_target = "target" in g.columns and g["target"].notna().any()
-    p1_all = float(g["target"].mean()) if has_target else float("nan")
-    p1_sp  = float(g[g["is_special"]==1]["target"].mean()) if has_target else float("nan")
-    cum    = float(g[sam_col].sum()) if sam_col else float("nan")
-    return p1_all, p1_sp, cum, g
-
-def sweep_alphas(D: pd.DataFrame, p0: np.ndarray, p1: np.ndarray, step=0.05):
-    is_sp = (D["is_special"] == 1).values
-    best = {"sp":0.0,"ns":0.0,"p1":-1.0}
-    for a_sp in np.arange(0.0, 1.0 + 1e-9, step):
-        for a_ns in np.arange(0.0, 1.0 + 1e-9, step):
-            blend = np.where(is_sp, a_sp*p1 + (1-a_sp)*p0, a_ns*p1 + (1-a_ns)*p0)
-            p1_all, _, _, _ = eval_k1(D, blend, get_samai_col(D))
-            if p1_all > best["p1"]:
-                best = {"sp":float(a_sp), "ns":float(a_ns), "p1":float(p1_all)}
-    return best
-
-def resolve_window(days: int, end_date_str: str | None):
-    end = (pd.to_datetime(end_date_str).normalize()
-           if end_date_str else pd.to_datetime("today").normalize())
-    start  = end - pd.Timedelta(days=days-1)
-    cutoff = start - pd.Timedelta(days=1)
-    return start, end, cutoff
-
-def concat_csv_files(uploaded_files) -> pd.DataFrame:
-    dfs = []
-    for f in uploaded_files or []:
-        try:
-            df = pd.read_csv(f)
-            dfs.append(df)
-        except Exception as e:
-            st.error(f"{getattr(f,'name',str(f))}: 読み込み失敗 ({e})")
-    if not dfs: return pd.DataFrame()
-    return pd.concat(dfs, ignore_index=True)
-
-def build_features_train(m, df: pd.DataFrame) -> tuple[pd.DataFrame, object, object]:
-    D = df.copy()
-    if hasattr(m, "add_calendar_features"):         D = m.add_calendar_features(D)
-    if hasattr(m, "add_exante_features"):           D = m.add_exante_features(D)
-    D = m.add_series_aggregates(D)
-    D = m.add_neighbor_features(D)
-    if hasattr(m, "add_wave_trend_features"):       D = m.add_wave_trend_features(D)
-    if hasattr(m, "add_series_percentile_features"):D = m.add_series_percentile_features(D)
-    if hasattr(m, "add_bayesian_machine_ctr"):      D = m.add_bayesian_machine_ctr(D)
-    if hasattr(m, "add_day_state_features"):        D, sc, km = m.add_day_state_features(D, fit=True, n_clusters=5)
-    else:                                           sc, km = None, None
-    must = ["samai_lag1", "g_num_lag1", "avg_lag1"]
-    if all(c in D.columns for c in must):
-        D = m.drop_na_lag1_for_training(D)
-    return D, sc, km
-
-def build_features_val(m, df: pd.DataFrame, sc=None, km=None) -> pd.DataFrame:
-    D = df.copy()
-    if hasattr(m, "add_calendar_features"):         D = m.add_calendar_features(D)
-    if hasattr(m, "add_exante_features"):           D = m.add_exante_features(D)
-    D = m.add_series_aggregates(D)
-    D = m.add_neighbor_features(D)
-    if hasattr(m, "add_wave_trend_features"):       D = m.add_wave_trend_features(D)
-    if hasattr(m, "add_series_percentile_features"):D = m.add_series_percentile_features(D)
-    if hasattr(m, "add_bayesian_machine_ctr"):      D = m.add_bayesian_machine_ctr(D)
-    if hasattr(m, "add_day_state_features"):
-        D, _, _ = m.add_day_state_features(D, fit=True, n_clusters=5)
-    return D
-
-# ====== UI ======
-st.title(APP_TITLE)
-
+# ===== サイドバー：対象日 =====
 with st.sidebar:
-    st.header("① モデル")
-    base_model = st.file_uploader("BASE model_dir.joblib", type=["joblib","pkl"])
-    drop_model = st.file_uploader("DROP model_dir.joblib", type=["joblib","pkl"])
+    st.header("対象日")
+    target_dt = st.date_input("日付", date.today())
+    st.caption("K=1の『日付・機種・台番号』のみ表示（特日/角バッジ付き）。")
 
-    st.header("② データ（CSV）")
-    tr_files = st.file_uploader("学習CSV v14（4機種まとめてOK）", type=["csv"], accept_multiple_files=True)
-    te_files = st.file_uploader("テストCSV（*_test_ge_*_v14）", type=["csv"], accept_multiple_files=True)
-
-    st.header("③ 期間設定")
-    days = st.number_input("遡り日数（評価窓）", 7, 60, 14, 1)
-    end_date = st.date_input("評価最終日（未指定なら当日）", value=None)
-    warmup_days = st.number_input("ウォームアップ日数（学習直前履歴）", 0, 30, WARMUP_DAYS_DEFAULT, 1)
-
-    st.header("④ ブレンド")
-    sweep = st.toggle("α 自動スイープ", value=True)
-    a_sp = st.slider("α (Special)", 0.0, 1.0, 0.25, 0.05, disabled=sweep)
-    a_ns = st.slider("α (Non-Special)", 0.0, 1.0, 0.75, 0.05, disabled=sweep)
-
-run = st.button("予測を実行", type="primary")
-
-if run:
+# ===== データ読込 =====
+def _coerce_bool_int(s):
     try:
-        if base_model is None or drop_model is None:
-            st.error("BASE / DROP モデルをアップロードしてください。"); st.stop()
-        if not tr_files or not te_files:
-            st.error("学習CSV（v14）とテストCSV（*_test_ge_*_v14）をアップロードしてください。"); st.stop()
+        return s.astype("int64")
+    except Exception:
+        return s.fillna(0).astype("int64")
 
-        # モデル＆特徴量
-        b0, b1 = jb.load(base_model), jb.load(drop_model)
-        F0, F1 = list(b0["feat"]), list(b1["feat"])
+def load_k1_picks_for_day(dt: date) -> pd.DataFrame:
+    # 既定: outputs/picks/YYYY-MM-DD_k1.csv
+    fp = PICKS_DIR / (str(dt) + "_k1.csv")
+    if not fp.exists():
+        return pd.DataFrame()
+    df = pd.read_csv(fp)
 
-        df_train = concat_csv_files(tr_files)
-        df_test  = concat_csv_files(te_files)
-        if df_train.empty or df_test.empty:
-            st.error("CSVの読み込みに失敗しました。"); st.stop()
+    # 必須列: date, series, num
+    must = {"date", "series", "num"}
+    missing = sorted(list(must - set(df.columns)))
+    if missing:
+        raise RuntimeError("必須列が不足: " + ", ".join(missing))
 
-        df_train = ensure_min_schema(df_train)
-        df_test  = ensure_min_schema(df_test)
+    # 型整備
+    d = df.copy()
+    d["date"] = pd.to_datetime(d["date"], errors="coerce")
+    d["series"] = d["series"].astype(str)
+    d["num"] = pd.to_numeric(d["num"], errors="coerce").astype("Int64")
 
-        # 評価窓
-        end_str = None if end_date is None else pd.to_datetime(end_date).strftime("%Y-%m-%d")
-        start, end, cutoff = resolve_window(int(days), end_str)
+    # バッジ用（無ければ0で生成）
+    if "is_special" not in d.columns:
+        d["is_special"] = 0
+    if "is_corner" not in d.columns:
+        d["is_corner"] = 0
+    d["is_special"] = _coerce_bool_int(d["is_special"])
+    d["is_corner"]  = _coerce_bool_int(d["is_corner"])
 
-        mask_tr = (df_train["date"] <= cutoff) | (
-            (df_train["date"] < start) & (df_train["date"] >= (start - pd.Timedelta(days=int(warmup_days))))
-        )
-        trn = df_train[mask_tr].copy()
-        val = df_test[(df_test["date"] >= start) & (df_test["date"] <= end)].copy()
-        if val.empty:
-            st.error(f"評価期間 {start.date()}..{end.date()} でテストCSVにデータがありません。"); st.stop()
+    # 複数日が入っている場合の安全対策：対象日で絞る
+    day_mask = d["date"].dt.date == dt
+    d = d[day_mask].copy()
 
-        # 特徴量
-        m = load_module(PK_FILE)
-        st.write(f"[WINDOW] train <= {cutoff.date()} | eval {start.date()}..{end.date()}")
-        trn, sc, km = build_features_train(m, trn)
-        val = build_features_val(m, val, sc=sc, km=km)
+    # 去重（最新を残す）
+    d = d.sort_values(["date"]).drop_duplicates(subset=["date", "series", "num"], keep="last")
+    return d
 
-        # 予測
-        p0 = predict_bundle(b0, F0, val)
-        p1 = predict_bundle(b1, F1, val)
-        sam_col = get_samai_col(val)
+# ===== 月次KPI集計 =====
+def compute_monthly_kpis(metrics_csv: Path) -> pd.DataFrame:
+    df = pd.read_csv(metrics_csv)
+    df["date"] = pd.to_datetime(df["date"], errors="coerce")
+    df = df[df["date"].notna()].copy()
+    df["month"] = df["date"].dt.to_period("M").dt.to_timestamp()
+    g = df.groupby("month", as_index=False)
+    out = g.agg({
+        "p_at_1": "mean",
+        "cum_samai": "sum",
+        "n_picked": "sum",
+        "n_positives": "sum",
+    })
+    return out
 
-        ba, bs, bc, _ = eval_k1(val, p0, sam_col)
-        da, ds, dc, _ = eval_k1(val, p1, sam_col)
-        st.write(f"BASE  P1_ALL={ba:.4f} SP={bs:.4f} CUM={int(bc)}")
-        st.write(f"DROP  P1_ALL={da:.4f} SP={ds:.4f} CUM={int(dc)}")
+# ===== 表示本体 =====
+def render_badge(row):
+    tags = []
+    if int(row.get("is_special", 0)) == 1:
+        tags.append("特日")
+    if int(row.get("is_corner", 0)) == 1:
+        tags.append("角")
+    if not tags:
+        return ""
+    return " ".join(["[" + x + "]" for x in tags])
 
-        # α
-        if sweep:
-            best = sweep_alphas(val, p0, p1, step=0.05)
-            st.write(f"[SWEEP] Best α => SP:{best['sp']:.2f}  NS:{best['ns']:.2f}  (metric=P1)")
-            alpha_sp, alpha_ns = best["sp"], best["ns"]
-        else:
-            alpha_sp, alpha_ns = float(a_sp), float(a_ns)
-            st.write(f"[BLEND] Fixed α => SP:{alpha_sp:.2f}  NS:{alpha_ns:.2f}")
+def render_k1_table(dt: date):
+    try:
+        picks = load_k1_picks_for_day(dt)
+        if picks.empty:
+            st.warning("対象日のK=1結果ファイルが見つかりません。日次バッチ（run_blend_daily.py）の完了を確認してください。")
+            return
 
-        is_sp = (val["is_special"] == 1).values
-        final = np.where(is_sp, alpha_sp*p1 + (1-alpha_sp)*p0,
-                               alpha_ns*p1 + (1-alpha_ns)*p0)
+        # 自己検証ログ
+        n_rows = len(picks)
+        day_min = str(picks["date"].min().date()) if not picks.empty else "-"
+        day_max = str(picks["date"].max().date()) if not picks.empty else "-"
+        st.caption("自己検証: rows=%d, date_range=%s..%s" % (n_rows, day_min, day_max))
 
-        fa, fs, fc, _ = eval_k1(val, final, sam_col)
-        st.success(f"BLEND P1_ALL={fa:.4f} SP={fs:.4f} CUM={int(fc)}")
-
-        out = val.copy()
-        out["pred_base"]  = p0
-        out["pred_drop"]  = p1
-        out["pred_blend"] = final
-
-        top1 = (out.sort_values(["date","pred_blend"], ascending=[True, False])
-                    .groupby("date", as_index=False).head(1))
-
-        cols = ["date","series","num"]
-        if sam_col: cols.append(sam_col)
-        for c in ["target","target_eval","pred_base","pred_drop","pred_blend"]:
-            if c in top1.columns: cols.append(c)
-
-        st.subheader("K=1（各日トップ）")
-        st.dataframe(top1[cols], use_container_width=True)
-
-        csv_bytes = top1.to_csv(index=False).encode("utf-8")
-        st.download_button("⬇️ CSVダウンロード（top1_by_date_blend.csv）",
-                           data=csv_bytes, file_name="top1_by_date_blend.csv",
-                           mime="text/csv")
+        view = picks.copy()
+        view["badge"] = view.apply(render_badge, axis=1)
+        view = view[["date", "series", "num", "badge"]].rename(columns={"num": "台番号"})
+        st.subheader(str(dt) + " のK=1")
+        st.dataframe(view, use_container_width=True, hide_index=True)
     except Exception as e:
+        st.error("表示処理で例外が発生しました。内部ログを確認してください。")
         st.exception(e)
+
+render_k1_table(target_dt)
+
+# ===== 月次チャート =====
+if METRICS_FILE.exists():
+    try:
+        monthly = compute_monthly_kpis(METRICS_FILE)
+        if monthly.empty:
+            st.info("メトリクス履歴が空です。日次バッチ完了後に表示されます。")
+        else:
+            st.subheader("月次サマリ：P@1（平均）")
+            st.line_chart(monthly.set_index("month")["p_at_1"], height=240)
+            st.subheader("月次サマリ：累積差枚（合計）")
+            st.line_chart(monthly.set_index("month")["cum_samai"], height=240)
+    except Exception as e:
+        st.warning("月次可視化に失敗しました。")
+        st.exception(e)
+else:
+    st.info("メトリクス履歴が未作成です（outputs/metrics/metrics_history.csv）。初回日次完了後に表示されます。")
