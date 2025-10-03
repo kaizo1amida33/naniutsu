@@ -1,0 +1,93 @@
+name: predict_777_daily
+
+on:
+  schedule:
+    - cron: '30 16 * * *'   # JST 01:30
+  workflow_dispatch:
+    inputs:
+      target_date:
+        description: "Target date (YYYY-MM-DD). Defaults to JST today."
+        required: false
+        type: string
+
+jobs:
+  predict:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    env:
+      NANI: naniutsu_v7.py
+      MODEL_DIR: model_28/model_dir.joblib
+      OUT_DIR: real_model_28
+      HISTORY_FILES: hokuto_warmup_14days.csv,monkey_warmup_14days.csv,ghoul_warmup_14days.csv,myjugglerV_warmup_14days.csv
+      TEST_FILES: hokuto_test_ge_2025-08-17_v14.csv,monkey_test_ge_2025-08-17_v14.csv,ghoul_test_ge_2025-08-17_v14.csv,myjugglerV_test_ge_2025-08-17_v14.csv
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install deps
+        run: |
+          pip install -r requirements.txt
+
+      - name: Resolve TARGET_DATE (JST with holiday guard)
+        id: date
+        shell: bash
+        run: |
+          python -V
+          # デポに date_guard.py と closed.txt を同居させておく
+          TD=$(python date_guard.py | awk -F= '/^TARGET_DATE=/{print $2}')
+          SKIP=$(python date_guard.py | awk -F= '/^SKIP=/{print $2}')
+          echo "TARGET_DATE=$TD" >> $GITHUB_OUTPUT
+          echo "SKIP=$SKIP" >> $GITHUB_OUTPUT
+          echo "Target date: $TD  (skip=$SKIP)"
+
+      - name: Score (production)
+        if: steps.date.outputs.SKIP != '1'
+        run: |
+          python "$NANI" score \
+            --model_dir "$MODEL_DIR" \
+            --history_files "$HISTORY_FILES" \
+            --test_files "$TEST_FILES" \
+            --production_mode \
+            --target_date "${{ steps.date.outputs.TARGET_DATE }}" \
+            --out_dir "$OUT_DIR" \
+            --export_features
+
+      - name: Prepare predict_777.csv
+        if: steps.date.outputs.SKIP != '1'
+        run: |
+          cp "$OUT_DIR/pred.csv" predict_777.csv
+          echo "predict_777.csv ready"
+
+
+      - name: Print K=3 (per series)
+        shell: python
+        run: |
+          import csv, math, sys
+          rows=list(csv.DictReader(open("predict_777.csv", encoding="utf-8-sig")))
+          from collections import defaultdict
+          b=defaultdict(list)
+          for r in rows:
+            try: sc=float(r.get("score","nan"))
+            except: sc=float("nan")
+            r["_score"]=sc
+            b[r.get("series","")].append(r)
+          print("\n=== K=3 PICK (per series) ===")
+          for s,lst in b.items():
+            top=sorted(lst, key=lambda x: (x["_score"] if not math.isnan(x["_score"]) else -1e308), reverse=True)[:3]
+            for i,r in enumerate(top,1):
+              print(f"{s:12s}  K{i}  machine_id={r.get('machine_id','?')}  score={r.get('score','?')}")
+
+      - name: Upload artifact (predict_777.csv)
+        uses: actions/upload-artifact@v4
+        with:
+          name: predict_777_${{ steps.date.outputs.TARGET_DATE }}
+          path: predict_777.csv
+          if-no-files-found: error
