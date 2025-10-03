@@ -42,7 +42,17 @@ jobs:
 
       - name: Run prediction
         run: |
-          python workflow_predict_777_fixed.py --model_dir model_28/model_dir.joblib
+          # closed_days.txtがあれば使用
+          if [ -f closed_days.txt ]; then
+            python workflow_predict_777_fixed.py \
+              --model_dir model_28/model_dir.joblib \
+              --closed closed_days.txt \
+              --warmup_days 14
+          else
+            python workflow_predict_777_fixed.py \
+              --model_dir model_28/model_dir.joblib \
+              --warmup_days 14
+          fi
 
       - name: Verify output
         run: |
@@ -256,19 +266,18 @@ jobs:
           git add predictions/ 2>/dev/null || true
           git commit -m "chore: prediction $(date +%Y-%m-%d)" || echo "No changes"
           git push || echo "Push skipped"
-name: Daily Prediction Pipeline
-
-on:
+      - name: Daily Prediction Pipeline
+      on:
   schedule:
-    - cron: "0 23 * * *"  # JST 08:00 (スクレイピング後30分)
+      - cron: "0 23 * * *"  # JST 08:00 (スクレイピング後30分)
   workflow_dispatch:
 
-permissions:
+  permissions:
   contents: write
   pages: write
   id-token: write
 
-jobs:
+  jobs:
   predict:
     runs-on: ubuntu-latest
     environment:
