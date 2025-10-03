@@ -1,74 +1,81 @@
-name: Daily Prediction
+name: Auto Scraping Daily
 
 on:
   schedule:
-    - cron: "0 23 * * *"
-  workflow_dispatch:
+    - cron: "30 22 * * *"  # JST 07:30 (UTC 22:30)
+  workflow_dispatch:       # 手動実行ボタン
 
 permissions:
   contents: write
-  pages: write
-  id-token: write
 
 jobs:
-  predict:
+  scraping:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0  # 全履歴を取得
 
-      - uses: actions/setup-python@v5
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
       - name: Install dependencies
         run: |
-          pip install pandas==2.2.2 numpy==1.26.4 scipy==1.11.4 scikit-learn==1.3.0 joblib==1.2.0
+          python -m pip install --upgrade pip
+          pip install pandas beautifulsoup4 lxml requests
 
-      - name: Run prediction
+      - name: Run scraping script
         run: |
-          python workflow_predict_777_fixed.py --model_dir model_28/model_dir.joblib --warmup_days 14
+          echo "[START] スクレイピング開始: $(date)"
+          python scraping_auto_csv.py
+          echo "[DONE] スクレイピング完了"
 
-      - name: Generate HTML
+      - name: Check generated files
         run: |
-          mkdir -p public
-          python3 << 'EOF'
-          import csv
-          with open('predict_777.csv') as f:
-              rows = list(csv.DictReader(f))
-          html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>K3</title><style>body{font-family:sans-serif;background:#667eea;padding:20px}.container{max-width:900px;margin:0 auto;background:white;border-radius:15px}header{background:#667eea;color:white;padding:30px;text-align:center}table{width:100%;border-collapse:collapse;margin:20px}th,td{padding:15px;border-bottom:1px solid #ddd}th{background:#667eea;color:white}.rank-1{background:#fff3cd;font-weight:bold}.rank-2{background:#d1ecf1}.rank-3{background:#d4edda}.download{text-align:center;padding:20px}a{display:inline-block;padding:10px 20px;background:#28a745;color:white;text-decoration:none;border-radius:5px}</style></head><body><div class="container"><header><h1>K3 Prediction</h1></header><div class="download"><a href="predict_777.csv">Download CSV</a></div><table><thead><tr>'
-          for col in rows[0].keys():
-              html += f'<th>{col}</th>'
-          html += '</tr></thead><tbody>'
-          for i, row in enumerate(rows, 1):
-              html += f'<tr class="rank-{i if i<=3 else ""}">'
-              for val in row.values():
-                  html += f'<td>{val}</td>'
-              html += '</tr>'
-          html += '</tbody></table></div></body></html>'
-          with open('public/index.html', 'w') as f:
-              f.write(html)
-          EOF
+          echo "=== 生成されたCSVファイル ==="
+          ls -lh *.csv 2>/dev/null || echo "CSVファイルが見つかりません"
+          
+          echo ""
+          echo "=== v14ファイルの確認 ==="
+          ls -lh *_v14.csv 2>/dev/null || echo "v14ファイルなし"
 
-      - name: Copy CSV
-        run: cp predict_777.csv public/
+      - name: Display CSV summary
+        run: |
+          for file in *_plazahakata_all_days_v14.csv *_test_ge_*_v14.csv; do
+            if [ -f "$file" ]; then
+              echo "=== $file ==="
+              wc -l "$file"
+              head -n 3 "$file"
+              echo ""
+            fi
+          done
 
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: public
-
-      - uses: actions/deploy-pages@v4
-        id: deployment
-
-      - name: Commit
+      - name: Commit and push results
         run: |
           git config user.name "github-actions[bot]"
-          git config user.email "actions@github.com"
-          git add predict_777.csv || true
-          git commit -m "Update prediction" || true
-          git push || true
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # CSVファイルを追加
+          git add *.csv last_url_*.txt 2>/dev/null || true
+          
+          # 変更があればコミット
+          if git diff --staged --quiet; then
+            echo "変更なし - スキップ"
+          else
+            git commit -m "chore: update scraped data $(date -u +%Y-%m-%d-%H%M)"
+            git push
+            echo "✓ CSVファイルをコミット・プッシュしました"
+          fi
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: scraped-csv-${{ github.run_number }}
+          path: |
+            *_plazahakata_all_days_v14.csv
+            *_test_ge_*_v14.csv
+          retention-days: 7
