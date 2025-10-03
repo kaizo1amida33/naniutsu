@@ -1,6 +1,4 @@
-name: Daily Prediction and GitHub Pages
-
-on:
+n:
   schedule:
     - cron: "0 23 * * *"
   workflow_dispatch:
@@ -37,8 +35,8 @@ jobs:
 
       - name: Check scraped data
         run: |
-          echo "=== スクレイピング済みデータ ==="
-          ls -lh *_v14.csv 2>/dev/null || echo "データなし"
+          echo "=== Scraped data ==="
+          ls -lh *_v14.csv 2>/dev/null || echo "No data"
 
       - name: Run prediction
         run: |
@@ -56,13 +54,12 @@ jobs:
       - name: Verify output
         run: |
           if [ ! -f predict_777.csv ]; then
-            echo "[ERROR] predict_777.csv not found"
+            echo "ERROR: predict_777.csv not found"
             exit 1
           fi
-          echo "=== predict_777.csv ==="
           cat predict_777.csv
 
-      - name: Generate HTML page
+      - name: Generate HTML
         run: |
           mkdir -p public
           TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
@@ -74,433 +71,62 @@ jobs:
           <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>K3予測結果</title>
+            <title>K3 Prediction</title>
             <style>
-              * { margin: 0; padding: 0; box-sizing: border-box; }
-              body { 
-                font-family: 'Segoe UI', sans-serif;
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                min-height: 100vh;
-                padding: 20px;
-              }
-              .container {
-                max-width: 900px;
-                margin: 0 auto;
-                background: white;
-                border-radius: 15px;
-                box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-                overflow: hidden;
-              }
-              header {
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                color: white;
-                padding: 30px;
-                text-align: center;
-              }
-              h1 { font-size: 2em; margin-bottom: 10px; }
-              .subtitle { opacity: 0.9; font-size: 1.1em; }
-              .info {
-                background: #f8f9fa;
-                padding: 20px;
-                border-bottom: 2px solid #e9ecef;
-              }
-              .info-grid {
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-                gap: 15px;
-              }
-              .info-item {
-                background: white;
-                padding: 15px;
-                border-radius: 8px;
-                border-left: 4px solid #667eea;
-              }
-              .info-label { color: #6c757d; font-size: 0.9em; }
-              .info-value { color: #212529; font-size: 1.2em; font-weight: bold; margin-top: 5px; }
-              .table-container { padding: 20px; }
-              table { width: 100%; border-collapse: collapse; }
-              th, td {
-                padding: 15px;
-                text-align: left;
-                border-bottom: 1px solid #dee2e6;
-              }
-              th {
-                background: #667eea;
-                color: white;
-                font-weight: 600;
-              }
+              body { font-family: sans-serif; background: linear-gradient(135deg, #667eea, #764ba2); min-height: 100vh; padding: 20px; }
+              .container { max-width: 900px; margin: 0 auto; background: white; border-radius: 15px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+              header { background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 30px; text-align: center; }
+              h1 { margin: 0 0 10px; }
+              .info { background: #f8f9fa; padding: 20px; }
+              table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+              th, td { padding: 15px; text-align: left; border-bottom: 1px solid #ddd; }
+              th { background: #667eea; color: white; }
               tr:hover { background: #f8f9fa; }
               .rank-1 { background: #fff3cd; font-weight: bold; }
               .rank-2 { background: #d1ecf1; }
               .rank-3 { background: #d4edda; }
-              footer {
-                background: #f8f9fa;
-                padding: 15px;
-                text-align: center;
-                color: #6c757d;
-                font-size: 0.9em;
-              }
-              .download-btn {
-                display: inline-block;
-                margin: 10px;
-                padding: 10px 20px;
-                background: #28a745;
-                color: white;
-                text-decoration: none;
-                border-radius: 5px;
-              }
-              .download-btn:hover { background: #218838; }
+              .download-btn { display: inline-block; margin: 10px; padding: 10px 20px; background: #28a745; color: white; text-decoration: none; border-radius: 5px; }
             </style>
           </head>
           <body>
             <div class="container">
-              <header>
-                <h1>K3予測結果</h1>
-                <p class="subtitle">パチスロ台番予測システム</p>
-              </header>
+              <header><h1>K3 Prediction</h1></header>
               <div class="info">
-                <div class="info-grid">
-                  <div class="info-item">
-                    <div class="info-label">生成日時</div>
-                    <div class="info-value">
-          HTMLEOF
-          
-          echo "${TIMESTAMP}" >> public/index.html
-          
-          cat >> public/index.html << 'HTMLEOF'
-                    </div>
-                  </div>
-                  <div class="info-item">
-                    <div class="info-label">対象日</div>
-                    <div class="info-value">
-          HTMLEOF
-          
-          echo "${TARGET_DATE}" >> public/index.html
-          
-          cat >> public/index.html << 'HTMLEOF'
-                    </div>
-                  </div>
-                  <div class="info-item">
-                    <div class="info-label">推奨台数</div>
-                    <div class="info-value">
-          HTMLEOF
-          
-          tail -n +2 predict_777.csv | wc -l | xargs echo -n >> public/index.html
-          echo "台" >> public/index.html
-          
-          cat >> public/index.html << 'HTMLEOF'
-                    </div>
-                  </div>
-                </div>
-                <div style="text-align: center; margin-top: 15px;">
-                  <a href="predict_777.csv" class="download-btn">CSVダウンロード</a>
-                </div>
+                <p>Generated: TIMESTAMP_PLACEHOLDER</p>
+                <p>Target Date: TARGETDATE_PLACEHOLDER</p>
+                <a href="predict_777.csv" class="download-btn">Download CSV</a>
               </div>
-              <div class="table-container">
-                <table>
-                  <thead><tr>
+              <table><thead><tr>
           HTMLEOF
+          
+          sed -i "s/TIMESTAMP_PLACEHOLDER/${TIMESTAMP}/g" public/index.html
+          sed -i "s/TARGETDATE_PLACEHOLDER/${TARGET_DATE}/g" public/index.html
           
           head -n1 predict_777.csv | tr ',' '\n' | while read col; do
             echo "<th>${col}</th>" >> public/index.html
           done
           
-          cat >> public/index.html << 'HTMLEOF'
-                  </tr></thead>
-                  <tbody>
-          HTMLEOF
+          echo "</tr></thead><tbody>" >> public/index.html
           
-          tail -n +2 predict_777.csv | awk -F',' 'BEGIN{OFS=","} {print (NR==1?"rank-1":(NR==2?"rank-2":(NR==3?"rank-3":""))), $0}' | while IFS=',' read class date series num mid score; do
-            echo "<tr class=\"${class}\"><td>${date}</td><td>${series}</td><td>${num}</td><td>${mid}</td><td>${score}</td></tr>" >> public/index.html
-          done
-          
-          cat >> public/index.html << 'HTMLEOF'
-                  </tbody>
-                </table>
-              </div>
-              <footer>
-                <p>Powered by GitHub Actions</p>
-              </footer>
-            </div>
-          </body>
-          </html>
-          HTMLEOF
-
-      - name: Copy CSV
-        run: cp predict_777.csv public/
-
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: public
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
-
-      - name: Commit results
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          mkdir -p predictions
-          cp predict_777.csv predictions/predict_$(date +%Y%m%d).csv
-          git add predictions/ 2>/dev/null || true
-          git commit -m "chore: prediction $(date +%Y-%m-%d)" || echo "No changes"
-          git push || echo "Push skipped"
-name: Daily Prediction & GitHub Pages
-
-on:
-  schedule:
-    - cron: "0 23 * * *"  # JST 08:00 (スクレイピング後30分)
-  workflow_dispatch:
-
-permissions:
-  contents: write
-  pages: write
-  id-token: write
-
-jobs:
-  predict-and-deploy:
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install pandas==2.2.2 numpy==1.26.4 scipy==1.11.4
-          pip install scikit-learn==1.3.0 joblib==1.2.0
-          pip install matplotlib seaborn
-
-      - name: Check scraped data
-        run: |
-          echo "=== スクレイピング済みデータ ==="
-          ls -lh *_v14.csv 2>/dev/null || echo "データなし"
-
-      - name: Run prediction
-        run: |
-          # closed_days.txtがあれば使用
-          if [ -f closed_days.txt ]; then
-            python workflow_predict_777_fixed.py \
-              --model_dir model_28/model_dir.joblib \
-              --closed closed_days.txt \
-              --warmup_days 14
-          else
-            python workflow_predict_777_fixed.py \
-              --model_dir model_28/model_dir.joblib \
-              --warmup_days 14
-          fi
-
-      - name: Verify output
-        run: |
-          if [ ! -f predict_777.csv ]; then
-            echo "[ERROR] predict_777.csv not found"
-            exit 1
-          fi
-          echo "=== predict_777.csv ==="
-          cat predict_777.csv
-
-      - name: Generate HTML page
-        run: |
-          mkdir -p public
-          
-          TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
-          TARGET_DATE=$(head -n 2 predict_777.csv | tail -n 1 | cut -d',' -f1)
-          
-          cat > public/index.html << 'EOF'
-          <!DOCTYPE html>
-          <html lang="ja">
-          <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>K3予測結果</title>
-            <style>
-              * { margin: 0; padding: 0; box-sizing: border-box; }
-              body { 
-                font-family: 'Segoe UI', sans-serif;
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                min-height: 100vh;
-                padding: 20px;
-              }
-              .container {
-                max-width: 900px;
-                margin: 0 auto;
-                background: white;
-                border-radius: 15px;
-                box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-                overflow: hidden;
-              }
-              header {
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                color: white;
-                padding: 30px;
-                text-align: center;
-              }
-              h1 { font-size: 2em; margin-bottom: 10px; }
-              .subtitle { opacity: 0.9; font-size: 1.1em; }
-              .info {
-                background: #f8f9fa;
-                padding: 20px;
-                border-bottom: 2px solid #e9ecef;
-              }
-              .info-grid {
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-                gap: 15px;
-              }
-              .info-item {
-                background: white;
-                padding: 15px;
-                border-radius: 8px;
-                border-left: 4px solid #667eea;
-              }
-              .info-label { color: #6c757d; font-size: 0.9em; }
-              .info-value { color: #212529; font-size: 1.2em; font-weight: bold; margin-top: 5px; }
-              .table-container { padding: 20px; }
-              table {
-                width: 100%;
-                border-collapse: collapse;
-              }
-              th, td {
-                padding: 15px;
-                text-align: left;
-                border-bottom: 1px solid #dee2e6;
-              }
-              th {
-                background: #667eea;
-                color: white;
-                font-weight: 600;
-              }
-              tr:hover { background: #f8f9fa; }
-              .rank-1 { background: #fff3cd; font-weight: bold; }
-              .rank-2 { background: #d1ecf1; }
-              .rank-3 { background: #d4edda; }
-              footer {
-                background: #f8f9fa;
-                padding: 15px;
-                text-align: center;
-                color: #6c757d;
-                font-size: 0.9em;
-              }
-              .download-btn {
-                display: inline-block;
-                margin: 10px;
-                padding: 10px 20px;
-                background: #28a745;
-                color: white;
-                text-decoration: none;
-                border-radius: 5px;
-              }
-              .download-btn:hover { background: #218838; }
-            </style>
-          </head>
-          <body>
-            <div class="container">
-              <header>
-                <h1>🎰 K3予測結果</h1>
-                <p class="subtitle">パチスロ台番予測システム</p>
-              </header>
-              
-              <div class="info">
-                <div class="info-grid">
-                  <div class="info-item">
-                    <div class="info-label">生成日時</div>
-                    <div class="info-value">
-          EOF
-          
-          echo "${TIMESTAMP}" >> public/index.html
-          
-          cat >> public/index.html << 'EOF'
-                    </div>
-                  </div>
-                  <div class="info-item">
-                    <div class="info-label">対象日</div>
-                    <div class="info-value">
-          EOF
-          
-          echo "${TARGET_DATE}" >> public/index.html
-          
-          cat >> public/index.html << 'EOF'
-                    </div>
-                  </div>
-                  <div class="info-item">
-                    <div class="info-label">推奨台数</div>
-                    <div class="info-value">
-          EOF
-          
-          tail -n +2 predict_777.csv | wc -l | xargs echo -n >> public/index.html
-          echo "台" >> public/index.html
-          
-          cat >> public/index.html << 'EOF'
-                    </div>
-                  </div>
-                </div>
-                <div style="text-align: center; margin-top: 15px;">
-                  <a href="predict_777.csv" class="download-btn">📥 CSVダウンロード</a>
-                </div>
-              </div>
-              
-              <div class="table-container">
-                <table>
-                  <thead>
-                    <tr>
-          EOF
-          
-          head -n1 predict_777.csv | tr ',' '\n' | while read col; do
-            echo "<th>$col</th>" >> public/index.html
-          done
-          
-          cat >> public/index.html << 'EOF'
-                    </tr>
-                  </thead>
-                  <tbody>
-          EOF
-          
-          tail -n +2 predict_777.csv | awk -F',' -v OFS=',' '{
-            class = (NR == 1) ? "rank-1" : (NR == 2) ? "rank-2" : (NR == 3) ? "rank-3" : ""
-            print class, $0
-          }' | while IFS=',' read class rest; do
-            echo "<tr class=\"$class\">" >> public/index.html
-            echo "$rest" | tr ',' '\n' | while read val; do
-              echo "<td>$val</td>" >> public/index.html
+          tail -n +2 predict_777.csv | awk -F',' '{print (NR==1?"rank-1":(NR==2?"rank-2":"rank-3"))","$0}' | while IFS=',' read class cols; do
+            echo "<tr class=\"${class}\">" >> public/index.html
+            echo "${cols}" | tr ',' '\n' | while read val; do
+              echo "<td>${val}</td>" >> public/index.html
             done
             echo "</tr>" >> public/index.html
           done
           
-          cat >> public/index.html << 'EOF'
-                  </tbody>
-                </table>
-              </div>
-              
-              <footer>
-                <p>Powered by GitHub Actions</p>
-              </footer>
-            </div>
-          </body>
-          </html>
-          EOF
+          echo "</tbody></table></div></body></html>" >> public/index.html
 
       - name: Copy CSV
         run: cp predict_777.csv public/
 
-      - name: Upload Pages artifact
+      - name: Upload Pages
         uses: actions/upload-pages-artifact@v3
         with:
           path: public
 
-      - name: Deploy to GitHub Pages
+      - name: Deploy Pages
         id: deployment
         uses: actions/deploy-pages@v4
 
@@ -508,362 +134,9 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          
           mkdir -p predictions
           cp predict_777.csv predictions/predict_$(date +%Y%m%d).csv
-          
-          git add predictions/ 2>/dev/null || true
-          git commit -m "chore: prediction $(date +%Y-%m-%d)" || echo "No changes"
-          git push || echo "Push skipped"
-name: Daily Prediction Pipeline
-
-on:
-  schedule:
-    - cron: "0 23 * * *"  # JST 08:00 (スクレイピング後30分)
-  workflow_dispatch:
-
-permissions:
-  contents: write
-  pages: write
-  id-token: write
-
-jobs:
-  predict:
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install pandas==2.2.2 numpy==1.26.4 scipy==1.11.4
-          pip install scikit-learn==1.3.0 joblib==1.2.0
-          pip install matplotlib seaborn
-
-      - name: Check scraped data
-        run: |
-          echo "=== スクレイピング済みデータ確認 ==="
-          ls -lh *_v14.csv 2>/dev/null || echo "データなし"
-
-      - name: Create tomorrow's stub CSV
-        run: |
-          python3 << 'PYTHON_SCRIPT'
-          import pandas as pd
-          from datetime import datetime, timedelta
-          import os
-          
-          # JSTで明日の日付取得
-          tomorrow = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
-          print(f"[INFO] 予測対象日: {tomorrow}")
-          
-          # テストファイル検索
-          test_files = []
-          for series in ['hokuto', 'monkey', 'ghoul', 'myjugglerV']:
-              pattern = f"{series}_test_ge_"
-              files = [f for f in os.listdir('.') if f.startswith(pattern) and f.endswith('_v14.csv')]
-              if files:
-                  test_files.append((series, files[0]))
-          
-          print(f"[INFO] 見つかったテストファイル: {len(test_files)}件")
-          
-          stub_files = []
-          for series, filename in test_files:
-              try:
-                  df = pd.read_csv(filename, dtype=str)
-                  
-                  # 日付列の正規化
-                  date_col = 'date'
-                  if date_col not in df.columns:
-                      date_col = [c for c in df.columns if 'date' in c.lower()][0]
-                  
-                  # 最新日のデータを取得
-                  df['date_parsed'] = pd.to_datetime(df[date_col], errors='coerce')
-                  latest_date = df['date_parsed'].max()
-                  latest_data = df[df['date_parsed'] == latest_date].copy()
-                  
-                  print(f"[{series}] 最新日: {latest_date.date()}, 台数: {len(latest_data)}")
-                  
-                  # 明日用のスタブ作成（必要列のみ）
-                  stub = pd.DataFrame({
-                      'date': [tomorrow] * len(latest_data),
-                      'num': latest_data['num'].values,
-                      'samai': ['0'] * len(latest_data),
-                      'g_num': ['0'] * len(latest_data),
-                      'avg': ['0'] * len(latest_data),
-                      'series': [series] * len(latest_data)
-                  })
-                  
-                  stub_filename = f"{series}_stub_{tomorrow}.csv"
-                  stub.to_csv(stub_filename, index=False, encoding='utf-8-sig')
-                  stub_files.append(stub_filename)
-                  print(f"[SUCCESS] {stub_filename} 作成完了")
-                  
-              except Exception as e:
-                  print(f"[ERROR] {series}: {e}")
-          
-          # スタブファイルリスト保存
-          with open('stub_files.txt', 'w') as f:
-              f.write(','.join(stub_files))
-          
-          print(f"\n[DONE] スタブファイル {len(stub_files)}件 作成完了")
-          PYTHON_SCRIPT
-
-      - name: Prepare history files (warmup)
-        run: |
-          python3 << 'PYTHON_SCRIPT'
-          import pandas as pd
-          import os
-          
-          # 各シリーズの全履歴から直近14日分を抽出
-          for series in ['hokuto', 'monkey', 'ghoul', 'myjugglerV']:
-              all_file = f"{series}_plazahakata_all_days_v14.csv"
-              warmup_file = f"{series}_warmup_14days.csv"
-              
-              if os.path.exists(all_file):
-                  df = pd.read_csv(all_file)
-                  df['date'] = pd.to_datetime(df['date'])
-                  
-                  # 直近14日分
-                  recent = df.sort_values('date').tail(14 * df['num'].nunique())
-                  recent.to_csv(warmup_file, index=False, encoding='utf-8-sig')
-                  print(f"[{series}] {warmup_file} 作成: {len(recent)}行")
-          PYTHON_SCRIPT
-
-      - name: Run prediction
-        run: |
-          # スタブファイルリスト読み込み
-          STUB_FILES=$(cat stub_files.txt)
-          
-          # warmupファイル確認
-          WARMUP_FILES="hokuto_warmup_14days.csv,monkey_warmup_14days.csv,ghoul_warmup_14days.csv,myjugglerV_warmup_14days.csv"
-          
-          echo "[INFO] 予測実行開始..."
-          python workflow_predict_777.py \
-            --naniutsu naniutsu_v7.py \
-            --model_dir model_28/model_dir.joblib \
-            --history_files "$WARMUP_FILES" \
-            --test_files "$STUB_FILES" \
-            --out_dir prediction_output \
-            --target_date auto \
-            --force_date \
-            --use_stub \
-            2>&1 | tee prediction.log
-
-      - name: Verify prediction output
-        run: |
-          if [ ! -f predict_777.csv ]; then
-            echo "[ERROR] predict_777.csv が生成されませんでした"
-            echo "=== 実行ログ ==="
-            tail -50 prediction.log
-            exit 1
-          fi
-          
-          echo "[SUCCESS] predict_777.csv 生成完了"
-          echo "=== K3予測結果 ==="
-          cat predict_777.csv
-
-      - name: Generate HTML page
-        run: |
-          mkdir -p public
-          
-          TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
-          TARGET_DATE=$(head -n 2 predict_777.csv | tail -n 1 | cut -d',' -f1)
-          
-          cat > public/index.html << EOF
-          <!DOCTYPE html>
-          <html lang="ja">
-          <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>K3予測結果 - ${TARGET_DATE}</title>
-            <style>
-              * { margin: 0; padding: 0; box-sizing: border-box; }
-              body { 
-                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                min-height: 100vh;
-                padding: 20px;
-              }
-              .container {
-                max-width: 900px;
-                margin: 0 auto;
-                background: white;
-                border-radius: 15px;
-                box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-                overflow: hidden;
-              }
-              header {
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                color: white;
-                padding: 30px;
-                text-align: center;
-              }
-              h1 { font-size: 2em; margin-bottom: 10px; }
-              .subtitle { opacity: 0.9; font-size: 1.1em; }
-              .info {
-                background: #f8f9fa;
-                padding: 20px;
-                border-bottom: 2px solid #e9ecef;
-              }
-              .info-grid {
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-                gap: 15px;
-              }
-              .info-item {
-                background: white;
-                padding: 15px;
-                border-radius: 8px;
-                border-left: 4px solid #667eea;
-              }
-              .info-label { color: #6c757d; font-size: 0.9em; margin-bottom: 5px; }
-              .info-value { color: #212529; font-size: 1.2em; font-weight: bold; }
-              .table-container {
-                padding: 20px;
-                overflow-x: auto;
-              }
-              table {
-                width: 100%;
-                border-collapse: collapse;
-              }
-              th, td {
-                padding: 15px;
-                text-align: left;
-                border-bottom: 1px solid #dee2e6;
-              }
-              th {
-                background: #667eea;
-                color: white;
-                font-weight: 600;
-                position: sticky;
-                top: 0;
-              }
-              tr:hover { background: #f8f9fa; }
-              .rank-1 { background: #fff3cd; font-weight: bold; }
-              .rank-2 { background: #d1ecf1; }
-              .rank-3 { background: #d4edda; }
-              footer {
-                background: #f8f9fa;
-                padding: 15px;
-                text-align: center;
-                color: #6c757d;
-                font-size: 0.9em;
-              }
-              .download-btn {
-                display: inline-block;
-                margin: 10px;
-                padding: 10px 20px;
-                background: #28a745;
-                color: white;
-                text-decoration: none;
-                border-radius: 5px;
-                transition: background 0.3s;
-              }
-              .download-btn:hover { background: #218838; }
-            </style>
-          </head>
-          <body>
-            <div class="container">
-              <header>
-                <h1>🎰 K3予測結果</h1>
-                <p class="subtitle">対象日: ${TARGET_DATE}</p>
-              </header>
-              
-              <div class="info">
-                <div class="info-grid">
-                  <div class="info-item">
-                    <div class="info-label">生成日時</div>
-                    <div class="info-value">${TIMESTAMP}</div>
-                  </div>
-                  <div class="info-item">
-                    <div class="info-label">対象日</div>
-                    <div class="info-value">${TARGET_DATE}</div>
-                  </div>
-                  <div class="info-item">
-                    <div class="info-label">推奨台数</div>
-                    <div class="info-value">$(tail -n +2 predict_777.csv | wc -l)台</div>
-                  </div>
-                </div>
-                <div style="text-align: center; margin-top: 15px;">
-                  <a href="predict_777.csv" class="download-btn" download>📥 CSVダウンロード</a>
-                </div>
-              </div>
-              
-              <div class="table-container">
-                <table>
-                  <thead>
-          EOF
-          
-          # ヘッダー行
-          head -n1 predict_777.csv | awk -F',' '{
-            print "<tr>"
-            for(i=1; i<=NF; i++) print "<th>" $i "</th>"
-            print "</tr>"
-          }' >> public/index.html
-          
-          echo "</thead><tbody>" >> public/index.html
-          
-          # データ行
-          tail -n +2 predict_777.csv | awk -F',' 'NR<=3 {class="rank-"NR} NR>3 {class=""} {
-            print "<tr class=\"" class "\">"
-            for(i=1; i<=NF; i++) print "<td>" $i "</td>"
-            print "</tr>"
-          }' >> public/index.html
-          
-          cat >> public/index.html << EOF
-                  </tbody>
-                </table>
-              </div>
-              
-              <footer>
-                <p>Powered by GitHub Actions | Updated: ${TIMESTAMP}</p>
-              </footer>
-            </div>
-          </body>
-          </html>
-          EOF
-
-      - name: Copy CSV to public
-        run: cp predict_777.csv public/
-
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: public
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
-
-      - name: Commit results
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          
-          mkdir -p predictions
-          cp predict_777.csv predictions/predict_$(date +%Y%m%d).csv
-          
-          git add predictions/ public/ 2>/dev/null || true
-          git commit -m "chore: add prediction $(date +%Y-%m-%d)" || echo "No changes"
-          git push || echo "Push failed"
-
-      - name: Upload prediction artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: prediction-${{ github.run_number }}
-          path: |
-            predict_777.csv
-            prediction.log
-          retention-days: 30
+          git add predictions/ || true
+          git commit -m "Update prediction" || true
+          git push || true
+EOF
