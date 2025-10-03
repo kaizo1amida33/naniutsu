@@ -1,0 +1,62 @@
+name: predict_777_daily
+
+on:
+  schedule:
+    # JST 07:40 実行（UTC 22:40 に相当）
+    - cron: "40 22 * * *"
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps (locked versions)
+        run: |
+          python -m pip install --upgrade pip
+          pip install sklearn==1.3.0 joblib==1.2.0 numpy==1.26.4 pandas==2.2.2
+          
+      - name: Scrape dummy.html
+        run: python scrape_dummy.py
+
+      - name: Run workflow_predict_777.py
+        run: |
+          python workflow_predict_777.py
+          ls -al outputs
+
+      - name: Upload predict_777.csv artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: predict_777
+          path: outputs/predict_777.csv
+          if-no-files-found: error
+
+          permissions:
+          contents: write
+
+      - name: Generate HTML table from CSV
+        run: |
+          echo "<html><head><meta charset='utf-8'><title>predict_777</title></head><body>" > public/predict_777.html
+          echo "<h1>predict_777.csv (最新予測)</h1>" >> public/predict_777.html
+          echo "<table border=1 cellspacing=0 cellpadding=4>" >> public/predict_777.html
+          head -n1 outputs/predict_777.csv | awk -F, '{print "<tr>"; for(i=1;i<=NF;i++){print "<th>"$i"</th>"}; print "</tr>"}' >> public/predict_777.html
+          tail -n +2 outputs/predict_777.csv | awk -F, '{print "<tr>"; for(i=1;i<=NF;i++){print "<td>"$i"</td>"}; print "</tr>"}' >> public/predict_777.html
+          echo "</table></body></html>" >> public/predict_777.html
+      
+      - name: Commit latest predict_777.csv to repo
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@users.noreply.github.com"
+          mkdir -p public
+          cp outputs/predict_777.csv public/predict_777.csv
+          git add public/predict_777.csv
+          git commit -m "chore: update predict_777.csv [skip ci]" || echo "no changes"
+          git push
+          
