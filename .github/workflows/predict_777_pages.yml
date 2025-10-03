@@ -27,9 +27,11 @@ jobs:
           pip install pandas beautifulsoup4 lxml
 
       - name: Build outputs (dummy scrape -> CSV)
+        env:
+          NEXT_DATE_OVERRIDE: "2025-09-26"   # ← 任意。未指定ならJST今日を出力
         run: |
           mkdir -p outputs
-          python scrape_dummy.py    # outputs/predict_777.csv を生成（Dmax+1）
+          python scrape_dummy.py
 
       - name: Make HTML table
         run: |
