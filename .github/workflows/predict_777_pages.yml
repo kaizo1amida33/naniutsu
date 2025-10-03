@@ -13,7 +13,6 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    environment: github-pages   # ← ここに移動
     steps:
       - uses: actions/checkout@v4
 
@@ -27,8 +26,6 @@ jobs:
           pip install pandas beautifulsoup4 lxml
 
       - name: Build outputs (dummy scrape -> CSV)
-        env:
-          NEXT_DATE_OVERRIDE: "2025-09-26"   # ← 任意。未指定ならJST今日を出力
         run: |
           mkdir -p outputs
           python scrape_dummy.py
@@ -51,7 +48,10 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     needs: build
+    environment:
+      name: github-pages         # ← これを追加！
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Deploy to GitHub Pages
-        id: deploy
+        id: deployment
         uses: actions/deploy-pages@v4
