@@ -1,0 +1,48 @@
+name: predict_777_artifact
+
+on:
+  workflow_dispatch: {}          # 手動実行
+  schedule:
+    - cron: "40 22 * * *"        # JST 07:40 自動実行（不要なら削除）
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas beautifulsoup4 lxml
+
+      - name: Run scrape_dummy.py (→ predict_777.csv)
+        run: |
+          mkdir -p outputs
+          python scrape_dummy.py
+
+      - name: Make simple HTML table
+        run: |
+          mkdir -p public
+          echo "<html><head><meta charset='utf-8'></head><body><table border=1>" > public/index.html
+          head -n1 outputs/predict_777.csv | awk -F, '{print "<tr>"; for(i=1;i<=NF;i++){print "<th>"$i"</th>"}; print "</tr>"}' >> public/index.html
+          tail -n +2 outputs/predict_777.csv | awk -F, '{print "<tr>"; for(i=1;i<=NF;i++){print "<td>"$i"</td>"}; print "</tr>"}' >> public/index.html
+          echo "</table></body></html>" >> public/index.html
+
+      - name: Upload CSV artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: predict_777_csv
+          path: outputs/predict_777.csv
+          if-no-files-found: error
+
+      - name: Upload HTML artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: predict_777_html
+          path: public/index.html
+          if-no-files-found: error
