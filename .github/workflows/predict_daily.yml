@@ -42,6 +42,18 @@ jobs:
           echo "=== prediction_output contents ==="
           ls -la prediction_output/ || echo "Directory not found"
 
+      - name: Save to predictions folder
+        run: |
+          echo "=== Creating predictions folder ==="
+          mkdir -p predictions
+          
+          echo "=== Copying to dated file ==="
+          cp predict_777.csv predictions/predict_$(date +%Y%m%d).csv
+          
+          echo "=== Verify files ==="
+          ls -la predictions/
+          cat predictions/predict_$(date +%Y%m%d).csv
+
       - name: Generate HTML
         run: |
           mkdir -p public
@@ -73,11 +85,19 @@ jobs:
       - uses: actions/deploy-pages@v4
         id: deployment
 
-      - name: Commit
+      - name: Commit results
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "actions@github.com"
-          git add predict_777.csv || true
-          git commit -m "Update prediction" || true
-          git push || true
-
+          
+          echo "=== Git add ==="
+          git add predict_777.csv predictions/
+          
+          echo "=== Git status ==="
+          git status
+          
+          echo "=== Git commit ==="
+          git commit -m "Update prediction $(date +%Y-%m-%d)"
+          
+          echo "=== Git push ==="
+          git push
