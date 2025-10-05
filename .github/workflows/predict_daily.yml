@@ -81,3 +81,4 @@ jobs:
           git add predict_777.csv all_predictions.csv
           git commit -m "Update prediction $(date +%Y-%m-%d)"
           git push
+
