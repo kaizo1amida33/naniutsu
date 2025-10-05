@@ -36,44 +36,13 @@ jobs:
 
       - name: Run prediction
         run: |
-          echo "=== Create output directory ==="
           mkdir -p prediction_output
+          python workflow_predict_777_fixed.py --model_dir model_28/model_dir.joblib
           
-          echo "=== Run prediction script ==="
-          python workflow_predict_777_fixed.py --model_dir model_28/model_dir.joblib 2>&1 | tee prediction.log
-          
-          echo ""
-          echo "=== Check script exit code ==="
-          echo "Exit code: $?"
-          
-          echo ""
-          echo "=== List all files in prediction_output ==="
-          ls -la prediction_output/ || echo "prediction_output not found"
-          
-          echo ""
-          echo "=== Find all CSV files ==="
-          find . -maxdepth 2 -name "*.csv" -type f
-          
-          echo ""
-          echo "=== Check predict_777.csv ==="
-          if [ -f predict_777.csv ]; then
-            echo "✓ predict_777.csv exists"
-            cat predict_777.csv
-          else
-            echo "✗ predict_777.csv NOT FOUND"
-          fi
-          
-          echo ""
-          echo "=== Check all_predictions.csv ==="
-          if [ -f prediction_output/all_predictions.csv ]; then
-            echo "✓ Found in prediction_output/"
-            cp prediction_output/all_predictions.csv all_predictions.csv
-            wc -l all_predictions.csv
-          else
-            echo "✗ all_predictions.csv NOT FOUND"
-            echo "Searching everywhere..."
-            find . -name "all_predictions.csv" -type f || echo "Not found anywhere"
-          fi
+          echo "=== Copy all_predictions.csv to root ==="
+          cp prediction_output/all_predictions.csv all_predictions.csv
+          ls -la all_predictions.csv
+          wc -l all_predictions.csv
 
       - name: Generate HTML
         run: |
@@ -99,9 +68,7 @@ jobs:
       - name: Copy CSVs
         run: |
           cp predict_777.csv public/
-          if [ -f all_predictions.csv ]; then
-            cp all_predictions.csv public/
-          fi
+          cp all_predictions.csv public/
 
       - uses: actions/upload-pages-artifact@v3
         with:
@@ -114,9 +81,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "actions@github.com"
-          git add predict_777.csv
-          if [ -f all_predictions.csv ]; then
-            git add all_predictions.csv
-          fi
+          git add predict_777.csv all_predictions.csv
           git commit -m "Update prediction $(date +%Y-%m-%d)"
           git push
