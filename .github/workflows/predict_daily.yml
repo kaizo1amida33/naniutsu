@@ -34,12 +34,46 @@ jobs:
           pip install matplotlib seaborn
           pip install optuna
 
-      - name: Run prediction
+            - name: Run prediction
         run: |
-          python workflow_predict_777_fixed.py --model_dir model_28/model_dir.joblib
-          echo "=== Verify all_predictions.csv ==="
-          ls -la all_predictions.csv
-          wc -l all_predictions.csv
+          echo "=== Create output directory ==="
+          mkdir -p prediction_output
+          
+          echo "=== Run prediction script ==="
+          python workflow_predict_777_fixed.py --model_dir model_28/model_dir.joblib 2>&1 | tee prediction.log
+          
+          echo ""
+          echo "=== Check script exit code ==="
+          echo "Exit code: $?"
+          
+          echo ""
+          echo "=== List all files in prediction_output ==="
+          ls -la prediction_output/ || echo "prediction_output not found"
+          
+          echo ""
+          echo "=== Find all CSV files ==="
+          find . -maxdepth 2 -name "*.csv" -type f
+          
+          echo ""
+          echo "=== Check predict_777.csv ==="
+          if [ -f predict_777.csv ]; then
+            echo "✓ predict_777.csv exists"
+            cat predict_777.csv
+          else
+            echo "✗ predict_777.csv NOT FOUND"
+          fi
+          
+          echo ""
+          echo "=== Check all_predictions.csv ==="
+          if [ -f prediction_output/all_predictions.csv ]; then
+            echo "✓ Found in prediction_output/"
+            cp prediction_output/all_predictions.csv all_predictions.csv
+            wc -l all_predictions.csv
+          else
+            echo "✗ all_predictions.csv NOT FOUND"
+            echo "Searching everywhere..."
+            find . -name "all_predictions.csv" -type f || echo "Not found anywhere"
+          fi
 
       - name: Generate HTML
         run: |
@@ -81,5 +115,6 @@ jobs:
           git add predict_777.csv all_predictions.csv
           git commit -m "Update prediction $(date +%Y-%m-%d)"
           git push
+
 
 
