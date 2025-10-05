@@ -37,22 +37,9 @@ jobs:
       - name: Run prediction
         run: |
           python workflow_predict_777_fixed.py --model_dir model_28/model_dir.joblib
-          echo "=== Checking for all_predictions.csv ==="
-          find . -name "all_predictions.csv" -ls
-          echo "=== prediction_output contents ==="
-          ls -la prediction_output/ || echo "Directory not found"
-
-      - name: Save to predictions folder
-        run: |
-          echo "=== Creating predictions folder ==="
-          mkdir -p predictions
-          
-          echo "=== Copying to dated file ==="
-          cp predict_777.csv predictions/predict_$(date +%Y%m%d).csv
-          
-          echo "=== Verify files ==="
-          ls -la predictions/
-          cat predictions/predict_$(date +%Y%m%d).csv
+          echo "=== Verify all_predictions.csv ==="
+          ls -la all_predictions.csv
+          wc -l all_predictions.csv
 
       - name: Generate HTML
         run: |
@@ -61,7 +48,7 @@ jobs:
           import csv
           with open('predict_777.csv') as f:
               rows = list(csv.DictReader(f))
-          html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>K3</title><style>body{font-family:sans-serif;background:#667eea;padding:20px}.container{max-width:900px;margin:0 auto;background:white;border-radius:15px}header{background:#667eea;color:white;padding:30px;text-align:center}table{width:100%;border-collapse:collapse;margin:20px}th,td{padding:15px;border-bottom:1px solid #ddd}th{background:#667eea;color:white}.rank-1{background:#fff3cd;font-weight:bold}.rank-2{background:#d1ecf1}.rank-3{background:#d4edda}.download{text-align:center;padding:20px}a{display:inline-block;padding:10px 20px;background:#28a745;color:white;text-decoration:none;border-radius:5px}</style></head><body><div class="container"><header><h1>K3 Prediction</h1></header><div class="download"><a href="predict_777.csv">Download CSV</a></div><table><thead><tr>'
+          html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>K3</title><style>body{font-family:sans-serif;background:#667eea;padding:20px}.container{max-width:900px;margin:0 auto;background:white;border-radius:15px}header{background:#667eea;color:white;padding:30px;text-align:center}table{width:100%;border-collapse:collapse;margin:20px}th,td{padding:15px;border-bottom:1px solid #ddd}th{background:#667eea;color:white}.rank-1{background:#fff3cd;font-weight:bold}.rank-2{background:#d1ecf1}.rank-3{background:#d4edda}.download{text-align:center;padding:20px}a{display:inline-block;padding:10px 20px;background:#28a745;color:white;text-decoration:none;border-radius:5px}</style></head><body><div class="container"><header><h1>K3 Prediction</h1></header><div class="download"><a href="predict_777.csv">Download K3 CSV</a><br><br><a href="all_predictions.csv">Download All Predictions CSV</a></div><table><thead><tr>'
           for col in rows[0].keys():
               html += f'<th>{col}</th>'
           html += '</tr></thead><tbody>'
@@ -75,8 +62,10 @@ jobs:
               f.write(html)
           EOF
 
-      - name: Copy CSV
-        run: cp predict_777.csv public/
+      - name: Copy CSVs
+        run: |
+          cp predict_777.csv public/
+          cp all_predictions.csv public/
 
       - uses: actions/upload-pages-artifact@v3
         with:
@@ -89,15 +78,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "actions@github.com"
-          
-          echo "=== Git add ==="
-          git add predict_777.csv predictions/
-          
-          echo "=== Git status ==="
-          git status
-          
-          echo "=== Git commit ==="
+          git add predict_777.csv all_predictions.csv
           git commit -m "Update prediction $(date +%Y-%m-%d)"
-          
-          echo "=== Git push ==="
           git push
