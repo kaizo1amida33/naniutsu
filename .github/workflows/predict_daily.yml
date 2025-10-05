@@ -37,6 +37,10 @@ jobs:
       - name: Run prediction
         run: |
           python workflow_predict_777_fixed.py --model_dir model_28/model_dir.joblib
+          echo "=== Checking for all_predictions.csv ==="
+          find . -name "all_predictions.csv" -ls
+          echo "=== prediction_output contents ==="
+          ls -la prediction_output/ || echo "Directory not found"
 
       - name: Generate HTML
         run: |
@@ -76,3 +80,4 @@ jobs:
           git add predict_777.csv || true
           git commit -m "Update prediction" || true
           git push || true
+
