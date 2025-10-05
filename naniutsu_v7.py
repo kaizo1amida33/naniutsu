@@ -2763,6 +2763,7 @@ def main():
             # スコアリング実行
             per_rows = []
             top_rows = []
+            all_predictions_rows = []  # 1回だけ初期化
 
             for d, g in df.groupby("date"):
                 is_sp = is_special_date(d)
@@ -2784,9 +2785,13 @@ def main():
                 raw = model.predict_proba(X)[:, 1]
                 score = iso.transform(raw) if iso is not None else raw
                 
+                # gにスコアを追加
                 g = g.copy()
                 g["score"] = score
                 
+                # all_predictions保存
+                all_predictions_rows.append(g[["date", "series", "num", "machine_id", "score", "target"]])
+
                 # K=1で最高スコアの台を選択
                 k = min(1, len(g))
                 pick = g.sort_values("score", ascending=False).head(k).copy()
@@ -2794,7 +2799,6 @@ def main():
                 if len(pick) > 0:
                     pick = pick.sort_values("score", ascending=False).copy()
                     pick["rank"] = np.arange(1, len(pick) + 1)
-                    
                     top_rows.append(pick[["date", "series", "machine_id", "score", "target", "samai", "g_num", "avg", "num"] + (["rank"] if len(pick)>0 else [])])
 
                 prec = float(pick["target"].mean()) if len(pick) > 0 else np.nan
@@ -2806,18 +2810,12 @@ def main():
                     "precision_at_k": prec,
                     "k": k,
                 })
-            # === 全台予測スコアを保存（K=3用） ===
-            all_predictions_rows = []
-            for d, g in df.groupby("date"):
-                g_scored = g.copy()
-                # このループ内でscoreが計算されているはず
-                g_scored["score"] = score  # または該当する変数名
-                all_predictions_rows.append(g_scored[["date", "series", "num", "machine_id", "score", "target"]])
 
+            # ループ終了後、all_predictions.csvを出力
             if all_predictions_rows:
                 all_pred = pd.concat(all_predictions_rows, ignore_index=True)
                 all_pred_path = os.path.join(args.out_dir, "all_predictions.csv")
-                all_pred.to_csv(all_pred_path, index=False)
+                all_pred.to_csv(all_pred_path, index=False, encoding='utf-8-sig')
                 log(f"[EXPORT] All predictions: {all_pred_path}")
                 
             topk = pd.concat(top_rows) if len(top_rows) > 0 else pd.DataFrame()
@@ -2826,7 +2824,7 @@ def main():
             # 結果出力
             topk_path = os.path.join(args.out_dir, "test_topk_k1.csv")
             per_path = os.path.join(args.out_dir, "test_pk_k1.csv")
-            
+
             if len(topk) > 0:
                 topk.to_csv(topk_path, index=False)
             perday.to_csv(per_path, index=False)
@@ -2839,11 +2837,11 @@ def main():
             log(f"[SCORE] saved -> {per_path}")
             log(f"[SCORE] mean P@1 (ALL) = {mean_all:.4f}")
             log(f"[SCORE] mean P@1 (SPECIAL 7/8/17/18/27/28) = {mean_sp:.4f}")
-            
+
             # 累積差枚分析
             log("[ANALYSIS] Performing comprehensive P@K and cumulative analysis...")
             pk_summary, topk1_detail = finalize_scoring_with_cumulative_analysis_fixed(perday, args.out_dir)
-            
+
             log("[END] SCORE")
             
         except Exception as e:
