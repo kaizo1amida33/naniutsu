@@ -36,13 +36,27 @@ jobs:
 
       - name: Run prediction
         run: |
+          set -e
           mkdir -p prediction_output
           python workflow_predict_777_fixed.py --model_dir model_28/model_dir.joblib
           
+          echo "=== Files in prediction_output ==="
+          ls -la prediction_output/
+          
           echo "=== Copy all_predictions.csv to root ==="
-          cp prediction_output/all_predictions.csv all_predictions.csv
-          ls -la all_predictions.csv
-          wc -l all_predictions.csv
+          if [ -f prediction_output/all_predictions.csv ]; then
+            cp prediction_output/all_predictions.csv all_predictions.csv
+            echo "✓ Copied successfully"
+            ls -la all_predictions.csv
+            wc -l all_predictions.csv
+          else
+            echo "✗ File not found!"
+            exit 1
+          fi
+          
+          echo "=== Verify predict_777.csv ==="
+          ls -la predict_777.csv
+          cat predict_777.csv
 
       - name: Generate HTML
         run: |
