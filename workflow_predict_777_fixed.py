@@ -330,9 +330,17 @@ def main():
         print(df_preview.head(3).to_string(index=False))
         print()
     
-    # テストファイル（スクレイピングデータ）を履歴として使用
-    history_files = test_files
-    log(f"[HISTORY] Using {len(history_files)} test files as history")
+    # warmup + test を結合して履歴として使用
+    series_list = ['hokuto', 'monkey', 'ghoul', 'myjugglerV']
+    warmup_files = create_warmup_files(series_list)
+    
+    # 履歴ファイルは warmup + test の両方
+    if warmup_files:
+        history_files = warmup_files + test_files
+        log(f"[HISTORY] Using {len(warmup_files)} warmup + {len(test_files)} test files")
+    else:
+        history_files = test_files
+        log(f"[HISTORY] Using {len(test_files)} test files only (no warmup)")
     
     target_date = pd.read_csv(stub_files[0])['date'].iloc[0]
     log(f"[TARGET DATE] {target_date}")
