@@ -95,6 +95,19 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "actions@github.com"
-          git add predict_777.csv all_predictions.csv
-          git commit -m "Update prediction $(date +%Y-%m-%d)"
+          
+          echo "=== Current files ==="
+          ls -la predict_777.csv all_predictions.csv
+          
+          echo "=== Force add files ==="
+          git add -f predict_777.csv all_predictions.csv
+          
+          echo "=== Git status ==="
+          git status
+          
+          echo "=== Commit (allow empty) ==="
+          git diff --cached --stat
+          git commit -m "Update prediction $(date +%Y-%m-%d)" --allow-empty
+          
+          echo "=== Push ==="
           git push
