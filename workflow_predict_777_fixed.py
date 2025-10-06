@@ -330,17 +330,23 @@ def main():
         print(df_preview.head(3).to_string(index=False))
         print()
     
-    # warmup + test を結合して履歴として使用
-    series_list = ['hokuto', 'monkey', 'ghoul', 'myjugglerV']
-    warmup_files = create_warmup_files(series_list)
+    # 既存の固定warmupファイルを使用
+    warmup_files = []
+    for series in series_list:
+        warmup_file = f"{series}_warmup_14days.csv"
+        if os.path.exists(warmup_file):
+            warmup_files.append(warmup_file)
+            log(f"[WARMUP] Found {warmup_file}")
+        else:
+            log(f"[WARN] {warmup_file} not found")
     
-    # 履歴ファイルは warmup + test の両方
+    # warmup（固定：8/03-8/16） + test（更新：8/17-10/05）を履歴として使用
     if warmup_files:
         history_files = warmup_files + test_files
-        log(f"[HISTORY] Using {len(warmup_files)} warmup + {len(test_files)} test files")
+        log(f"[HISTORY] Using {len(warmup_files)} warmup files + {len(test_files)} test files")
     else:
         history_files = test_files
-        log(f"[HISTORY] Using {len(test_files)} test files only (no warmup)")
+        log(f"[HISTORY] Using {len(test_files)} test files only (no warmup found)")
     
     target_date = pd.read_csv(stub_files[0])['date'].iloc[0]
     log(f"[TARGET DATE] {target_date}")
