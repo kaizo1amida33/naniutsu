@@ -330,6 +330,9 @@ def main():
         print(df_preview.head(3).to_string(index=False))
         print()
     
+    # シリーズリスト定義
+    series_list = ['hokuto', 'monkey', 'ghoul', 'myjugglerV']
+    
     # 既存の固定warmupファイルを使用
     warmup_files = []
     for series in series_list:
