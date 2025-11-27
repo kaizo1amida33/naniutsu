@@ -23,6 +23,11 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Set up Chrome
+        uses: browser-actions/setup-chrome@latest
+        with:
+          chrome-version: stable
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -78,4 +83,5 @@ jobs:
           path: |
             *_plazahakata_all_days_v14.csv
             *_test_ge_*_v14.csv
+
           retention-days: 7
